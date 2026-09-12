@@ -1,0 +1,22 @@
+# Cloudflare Pages applies these headers. scripts/build.js copies this file
+# into dist/ alongside the site.
+
+# No X-Frame-Options / frame-ancestors here on purpose: the page holds no
+# session and no server-side state, so clickjacking has no payoff, and framing
+# it is useful (embeds, previews, iframes). Add it back if you disagree.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+# HTML is served by Pages with `max-age=0, must-revalidate` already, which is
+# right for an un-hashed file, so it needs no rule of its own.
+
+/styles.css
+  Cache-Control: public, max-age=3600
+
+/app.js
+  Cache-Control: public, max-age=3600
+
+/src/core.js
+  Cache-Control: public, max-age=3600
