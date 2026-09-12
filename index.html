@@ -103,6 +103,55 @@ https://john@gmail.com:secret123@accounts.example.com/login
         <span class="txt">Parse header rows<em>treat &quot;email,password&quot; as data</em></span>
       </label>
 
+      <label class="switch">
+        <input type="checkbox" id="passDigit">
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="txt">Require digit in password<em>drop rows whose password has no 0–9</em></span>
+      </label>
+
+      <label class="field">
+        <span class="txt">Keep only these domains<em>gmail.com, co.uk — blank = keep all</em></span>
+        <input type="text" id="domainKeep" class="mono-input" placeholder="gmail.com, yahoo.co.uk" spellcheck="false" autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span class="txt">Skip these domains<em>case-insensitive, TLD suffixes work</em></span>
+        <input type="text" id="domainSkip" class="mono-input" placeholder="hotmail.com, outlook.com" spellcheck="false" autocomplete="off">
+      </label>
+
+      <div class="duo">
+        <label class="field">
+          <span class="txt">Min pass length<em>0 = off</em></span>
+          <input type="number" id="minPassLen" class="num" min="0" max="500" step="1" value="0">
+        </label>
+        <label class="field">
+          <span class="txt">Max pass length<em>0 = off</em></span>
+          <input type="number" id="maxPassLen" class="num" min="0" max="500" step="1" value="0">
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="txt">Email case<em>dedupe always compares case-insensitively</em></span>
+        <div class="select-wrap">
+          <select id="emailCase">
+            <option value="lower" selected>Lowercase</option>
+            <option value="keep">As pasted</option>
+            <option value="upper">UPPERCASE</option>
+          </select>
+        </div>
+      </label>
+
+      <label class="field">
+        <span class="txt">Password case<em>case matters — default keeps it</em></span>
+        <div class="select-wrap">
+          <select id="passCase">
+            <option value="keep" selected>As pasted</option>
+            <option value="lower">Lowercase</option>
+            <option value="upper">UPPERCASE</option>
+          </select>
+        </div>
+      </label>
+
       <label class="field">
         <span class="txt">De-duplicate by<em>which repeat to drop</em></span>
         <div class="select-wrap">
@@ -122,8 +171,15 @@ https://john@gmail.com:secret123@accounts.example.com/login
             <option value="email-asc">Email A → Z</option>
             <option value="email-desc">Email Z → A</option>
             <option value="pass-asc">Password A → Z</option>
+            <option value="domain">Domain A → Z, then email</option>
+            <option value="shuffle">Shuffle (stable per seed)</option>
           </select>
         </div>
+      </label>
+
+      <label class="field">
+        <span class="txt">Shuffle seed<em>only for the shuffle sort — same seed, same order</em></span>
+        <input type="number" id="shuffleSeed" class="num" min="0" max="999999" step="1" value="1">
       </label>
 
       <label class="field">
@@ -151,6 +207,22 @@ https://john@gmail.com:secret123@accounts.example.com/login
       </div>
     </div>
     <div class="stats" id="stats"></div>
+    <div class="split-bar">
+      <span class="split-label">Split → .zip</span>
+      <div class="select-wrap slim">
+        <select id="splitMode" aria-label="Split mode">
+          <option value="lines" selected>Lines per file</option>
+          <option value="count">Even files</option>
+          <option value="domain">One per domain</option>
+        </select>
+      </div>
+      <input type="number" id="splitValue" class="num" min="1" max="1000000" step="1" value="10000" aria-label="Split size">
+      <button type="button" class="btn" id="zipBtn" title="Bundle the split parts into one .zip download">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 5-5m-5 5-5-5"/><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>
+        Download .zip
+      </button>
+      <span class="split-meta" id="splitMeta"></span>
+    </div>
     <textarea id="output" class="mono" spellcheck="false" readonly placeholder="Your clean list appears here as you type."></textarea>
   </section>
 
@@ -176,6 +248,7 @@ https://john@gmail.com:secret123@accounts.example.com/login
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="src/core.js"></script>
+<script src="src/zip.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
