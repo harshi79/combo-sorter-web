@@ -1,0 +1,14 @@
+{
+  "name": "combo-sorter-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paste messy bulk email:pass text in any variant, get one clean de-duplicated list back. 100% client-side.",
+  "scripts": {
+    "test": "node --test tests/core.test.js tests/ui.test.js",
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

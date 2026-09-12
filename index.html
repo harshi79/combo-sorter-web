@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combo Sorter — clean up messy email:pass lists</title>
+<meta name="description" content="Paste bulk email:pass text in any format and get one clean, de-duplicated list. Everything runs in your browser.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧹</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🧹</span>
+    <div>
+      <h1>Combo Sorter</h1>
+      <p class="tagline">Paste any messy variant → get one clean <code>email:pass</code> list</p>
+    </div>
+  </div>
+  <div class="privacy" title="No network requests are made. Your data never leaves this tab.">
+    <span class="dot"></span> 100% in your browser — nothing is uploaded
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>1 · Paste the mess</h2>
+      <div class="panel-actions">
+        <label class="filebtn" title="Load one or more .txt / .csv files">
+          📂 Load file<input type="file" id="fileInput" accept=".txt,.csv,.text,.log,text/plain,text/csv" multiple hidden>
+        </label>
+        <button type="button" class="ghost" id="sampleBtn" title="Fill the box with messy sample data">Sample</button>
+        <button type="button" class="ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+    <textarea id="input" class="mono" spellcheck="false" autocomplete="off" autocapitalize="off"
+      placeholder="Drop anything in here — every line is handled independently:
+
+john@gmail.com:secret123
+john@gmail.com : secret123
+secret123:john@gmail.com
+john@gmail.com | secret123
+john@gmail.com,secret123
+&quot;john@gmail.com&quot;,&quot;secret123&quot;
+https://john@gmail.com:secret123@accounts.example.com/login
+# comments and blank lines are ignored"></textarea>
+    <div class="dropzone" id="dropzone">Drop .txt / .csv files anywhere</div>
+  </section>
+
+  <section class="panel options">
+    <h2>2 · Rules</h2>
+    <div class="grid">
+      <label class="opt"><input type="checkbox" id="autoFix" checked><span>Auto-fix domain typos<em>gnail.com → gmail.com, stray dots</em></span></label>
+      <label class="opt"><input type="checkbox" id="strict"><span>Strict email check<em>reject anything not a valid address</em></span></label>
+      <label class="opt"><input type="checkbox" id="allowEmptyPass"><span>Keep email-only rows<em>rows that have no password</em></span></label>
+      <label class="opt"><input type="checkbox" id="parseHeaders"><span>Parse header rows<em>treat &quot;email,password&quot; as data</em></span></label>
+
+      <label class="opt select"><span>De-duplicate by<em>which repeat to drop</em></span>
+        <select id="dedupe">
+          <option value="email" selected>Email (keep first)</option>
+          <option value="pair">Email + password</option>
+          <option value="none">Off — keep every row</option>
+        </select>
+      </label>
+
+      <label class="opt select"><span>Sort<em>order of the output</em></span>
+        <select id="sort">
+          <option value="source" selected>Original order</option>
+          <option value="email-asc">Email A → Z</option>
+          <option value="email-desc">Email Z → A</option>
+          <option value="pass-asc">Password A → Z</option>
+        </select>
+      </label>
+
+      <label class="opt select"><span>Output format<em>shape of each row</em></span>
+        <select id="format"></select>
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>3 · Clean list</h2>
+      <div class="panel-actions">
+        <button type="button" class="primary" id="copyBtn">📋 Copy</button>
+        <button type="button" id="downloadBtn">⬇ Download</button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <textarea id="output" class="mono" spellcheck="false" readonly placeholder="Your clean list appears here as you type."></textarea>
+  </section>
+
+  <section class="panel" id="rejectedPanel" hidden>
+    <div class="panel-head">
+      <h2>Rejected lines</h2>
+      <div class="panel-actions">
+        <button type="button" class="ghost" id="copyRejectedBtn">Copy</button>
+        <button type="button" class="ghost" id="hideRejectedBtn">Hide</button>
+      </div>
+    </div>
+    <p class="hint">These lines were skipped. Fix them in the input box, or tick an option above if the rule is too strict for your data.</p>
+    <div class="rejected-list" id="rejectedList"></div>
+  </section>
+</main>
+
+<footer>
+  <span>Everything is parsed locally in this tab — no server, no analytics, no uploads.</span>
+  <span><a href="https://github.com/YorichiiPrime/combo-sorter-web" rel="noopener">MIT licensed</a></span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="src/core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
