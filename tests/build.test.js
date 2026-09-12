@@ -57,6 +57,7 @@ test('npm run build produces exactly the expected files', () => {
     'index.html',
     'robots.txt',
     'src/core.js',
+    'src/zip.js',
     'styles.css',
   ]);
 });
@@ -82,7 +83,7 @@ test('every asset index.html references exists in dist/', () => {
 });
 
 test('deployed index.html and core.js are byte-identical to the source', () => {
-  for (const rel of ['index.html', 'styles.css', 'app.js', 'src/core.js']) {
+  for (const rel of ['index.html', 'styles.css', 'app.js', 'src/core.js', 'src/zip.js']) {
     const a = fs.readFileSync(path.join(ROOT, rel));
     const b = fs.readFileSync(path.join(DIST, rel));
     assert.ok(a.equals(b), rel + ' in dist/ differs from the source');
@@ -125,7 +126,7 @@ test('vercel.json ships the same security + cache headers as before', () => {
   assert.ok(any.has('Permissions-Policy'), 'expected a restrictive Permissions-Policy');
 
   // Every asset the site serves gets the 1-hour cache rule.
-  for (const asset of ['/styles.css', '/app.js', '/src/core.js']) {
+  for (const asset of ['/styles.css', '/app.js', '/src/core.js', '/src/zip.js']) {
     const cc = headerKeysFor(cfg, asset).get('Cache-Control');
     assert.equal(cc, 'public, max-age=3600', 'wrong Cache-Control for ' + asset);
   }

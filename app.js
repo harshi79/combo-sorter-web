@@ -1,8 +1,9 @@
 /*
  * combo-sorter-web :: UI wiring.
  *
- * All parsing lives in src/core.js. This file only moves data between the DOM
- * and that module — it never talks to the network.
+ * All parsing lives in src/core.js and all zipping in src/zip.js. This file
+ * only moves data between the DOM and those modules — it never talks to the
+ * network.
  */
 (function () {
   'use strict';
@@ -16,20 +17,37 @@
     format: $('format'),
     dedupe: $('dedupe'),
     sort: $('sort'),
+    shuffleSeed: $('shuffleSeed'),
+    emailCase: $('emailCase'),
+    passCase: $('passCase'),
     autoFix: $('autoFix'),
     strict: $('strict'),
     allowEmptyPass: $('allowEmptyPass'),
     parseHeaders: $('parseHeaders'),
+    passDigit: $('passDigit'),
+    domainKeep: $('domainKeep'),
+    domainSkip: $('domainSkip'),
+    minPassLen: $('minPassLen'),
+    maxPassLen: $('maxPassLen'),
     rejectedPanel: $('rejectedPanel'),
     rejectedList: $('rejectedList'),
     toast: $('toast'),
     themeBtn: $('themeBtn'),
     inputMeta: $('inputMeta'),
+    splitMode: $('splitMode'),
+    splitValue: $('splitValue'),
+    zipBtn: $('zipBtn'),
+    splitMeta: $('splitMeta'),
   };
 
   const STORAGE_KEY = 'combo-sorter-web:v1';
   const THEME_KEY = 'combo-sorter-web:theme';
-  const SETTINGS = ['autoFix', 'strict', 'allowEmptyPass', 'parseHeaders', 'dedupe', 'sort', 'format'];
+  const SETTINGS = [
+    'autoFix', 'strict', 'allowEmptyPass', 'parseHeaders', 'passDigit',
+    'domainKeep', 'domainSkip', 'minPassLen', 'maxPassLen',
+    'dedupe', 'sort', 'shuffleSeed', 'emailCase', 'passCase', 'format',
+    'splitMode', 'splitValue',
+  ];
 
   let lastResult = null;
   let rejectedText = '';
@@ -105,8 +123,11 @@
       chip('rejected', stats.rejected, stats.rejected ? 'bad' : 'good'),
     ];
     if (stats.duplicatesRemoved) parts.push(chip('duplicates removed', stats.duplicatesRemoved, 'warn'));
+    if (stats.filtered) parts.push(chip('filtered', stats.filtered, 'warn'));
     const skipped = stats.emptyLines + stats.comments + stats.headers;
     if (skipped) parts.push(chip('blank/comment/header', skipped));
+    if (stats.uniqueEmails > 1) parts.push(chip('unique emails', stats.uniqueEmails));
+    if (stats.uniquePasswords > 1) parts.push(chip('unique passwords', stats.uniquePasswords));
     const domains = Object.keys(stats.domains || {});
     if (domains.length) {
       const top = Object.entries(stats.domains).sort((a, b) => b[1] - a[1])[0];
@@ -136,14 +157,28 @@
     els.rejectedList.innerHTML = rows.join('');
   }
 
+  function clampInt(input, fallback) {
+    const n = parseInt(input, 10);
+    if (isNaN(n) || n < 0) return fallback;
+    return n;
+  }
+
   function currentOptions() {
     return {
       strict: els.strict.checked,
       autoFix: els.autoFix.checked,
       allowEmptyPass: els.allowEmptyPass.checked,
       parseHeaders: els.parseHeaders.checked,
+      passNeedsDigit: els.passDigit.checked,
+      domainKeep: els.domainKeep.value,
+      domainSkip: els.domainSkip.value,
+      minPassLen: clampInt(els.minPassLen.value, 0),
+      maxPassLen: clampInt(els.maxPassLen.value, 0),
       dedupe: els.dedupe.value,
       sort: els.sort.value,
+      shuffleSeed: clampInt(els.shuffleSeed.value, 1),
+      emailCase: els.emailCase.value,
+      passCase: els.passCase.value,
     };
   }
 
@@ -155,6 +190,28 @@
       lines.toLocaleString() + (lines === 1 ? ' line' : ' lines') + ' · ' + chars.toLocaleString() + ' chars';
   }
 
+  function updateSplitMeta() {
+    const n = lastResult ? lastResult.entries.length : 0;
+    const v = Math.max(1, parseInt(els.splitValue.value, 10) || 1);
+    if (!n) {
+      els.splitMeta.textContent = 'empty list';
+      els.splitValue.disabled = els.splitMode.value === 'domain';
+      return;
+    }
+    if (els.splitMode.value === 'domain') {
+      els.splitValue.disabled = true;
+      const domains = new Set(lastResult.entries.map((e) => e.email.split('@')[1] || '?'));
+      els.splitMeta.textContent = domains.size + ' file' + (domains.size === 1 ? '' : 's') + ' — one per domain';
+    } else if (els.splitMode.value === 'lines') {
+      els.splitValue.disabled = false;
+      const parts = Math.ceil(n / v);
+      els.splitMeta.textContent = parts + ' file' + (parts === 1 ? '' : 's') + ' · ' + v.toLocaleString() + ' lines each';
+    } else {
+      els.splitValue.disabled = false;
+      els.splitMeta.textContent = v + ' even file' + (v === 1 ? '' : 's');
+    }
+  }
+
   function run() {
     const started = performance.now();
     lastResult = ComboCore.process(els.input.value, currentOptions());
@@ -162,6 +219,7 @@
     renderStats(lastResult.stats);
     renderRejected(lastResult.rejected);
     updateMeta();
+    updateSplitMeta();
     save();
     const ms = Math.round(performance.now() - started);
     if (ms > 250) showToast('Parsed ' + lastResult.stats.lines.toLocaleString() + ' lines in ' + ms + ' ms');
@@ -202,9 +260,8 @@
     showToast(label + ' copied · ' + text.split('\n').length.toLocaleString() + ' lines');
   }
 
-  function download(text, filename) {
-    if (!text) return showToast('Nothing to download');
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  function downloadBlob(data, filename, mime) {
+    const blob = new Blob([data], { type: mime || 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -226,6 +283,30 @@
     if (formatName === 'csv') return 'csv';
     if (formatName === 'jsonl') return 'jsonl';
     return 'txt';
+  }
+
+  // ---------------------------------------------------------------- split -> zip
+  function splitAndZip() {
+    if (!lastResult || !lastResult.entries.length) return showToast('Nothing to split');
+    const ext = extensionFor(els.format.value);
+    const base = 'combo-sorted-' + stamp();
+    const files = [];
+
+    if (els.splitMode.value === 'domain') {
+      for (const g of ComboCore.groupByDomain(lastResult.entries, els.format.value)) {
+        files.push({ name: g.name + '.' + ext, data: g.text });
+      }
+    } else {
+      const chunks = ComboCore.splitText(els.output.value, els.splitMode.value, parseInt(els.splitValue.value, 10) || 1);
+      if (!chunks.length) return showToast('Nothing to split');
+      chunks.forEach((c, i) => {
+        files.push({ name: base + '-part-' + String(i + 1).padStart(3, '0') + '.' + ext, data: c });
+      });
+    }
+
+    const zip = ComboZip.buildZip(files);
+    downloadBlob(zip, base + '.zip', 'application/zip');
+    showToast('Zipped ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ' · ' + (zip.length / 1024).toFixed(1) + ' KB');
   }
 
   // ---------------------------------------------------------------- file input
@@ -273,6 +354,8 @@
     'not-an-email-line',
     '',
     'ivy@company.co.uk:London2023',
+    'mallory@company.co.uk:Par1sNight',
+    'priya@gnail.com:short',
   ].join('\n');
 
   // ---------------------------------------------------------------- events
@@ -301,8 +384,10 @@
   $('hideRejectedBtn').addEventListener('click', () => { els.rejectedPanel.hidden = true; });
 
   $('downloadBtn').addEventListener('click', () => {
-    download(els.output.value, 'combo-sorted-' + stamp() + '.' + extensionFor(els.format.value));
+    downloadBlob(els.output.value, 'combo-sorted-' + stamp() + '.' + extensionFor(els.format.value));
   });
+
+  els.zipBtn.addEventListener('click', splitAndZip);
 
   $('fileInput').addEventListener('change', (e) => {
     appendFiles(e.target.files);

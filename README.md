@@ -42,27 +42,63 @@ Passwords may contain the separator — `john@gmail.com:pass:with:colons` keeps
 
 - **Auto-fix domain typos** — `gnail.com`/`gmial.com`/`yaho.com`/… → correct
   domain, stray dot before `@` removed, doubled TLD (`gmail.com.com`) collapsed.
-  Deliberately narrow: it never rewrites a real domain such as `sub.example.co.uk`.
+  Deliberately narrow: it never rewrites a real domain such as `sub.example.co.uk`,
+  and a correctly-spelled domain keeps its original casing.
 - **Strict email check** — reject anything that is not a fully valid address
   (default is lenient, so unusual but real addresses survive).
 - **Keep email-only rows** — keep lines that have an email but no password.
 - **Parse header rows** — treat `email,password` as data instead of a header.
+- **Require digit in password** — drop rows whose password contains no `0-9`.
+- **Keep only these domains / Skip these domains** — comma-separated,
+  case-insensitive; TLD suffixes work (`co.uk` matches `mail.example.co.uk`).
+  Skip wins over keep when a domain hits both lists.
+- **Min / Max pass length** — drop passwords that are too short or too long.
+- **Email case / Password case** — lowercase, as pasted, or UPPERCASE.
+  De-duplication always compares case-insensitively, so `A@x.com:Pass` and
+  `a@x.com:pass` still collapse.
 - **De-duplicate by** — email (keeps the first occurrence), email+password, or off.
-- **Sort** — original order, email A→Z / Z→A, or password A→Z.
+- **Sort** — original order, email A→Z / Z→A, password A→Z, domain A→Z (then
+  email), or a **seeded shuffle** — deterministic per seed, so the list does
+  not re-jitter on every keystroke and the same seed reproduces the same order.
 - **Output format** — `email:pass`, `;`, `|`, `=`, TAB, CSV (properly quoted),
-  JSON Lines, emails only, passwords only.
+  JSON Lines, emails only, usernames only (local part, no domain), passwords only.
+- **Split → .zip** — split the finished output by *lines per file*, into *N
+  even files*, or into *one file per domain*, and download it as a single
+  `.zip`. The archive is built in-tab by a small dependency-free ZIP writer
+  (`src/zip.js`) that produces standard stored-ZIP output any unzip tool opens.
 
 The interface has a dark/light theme toggle (it follows your OS preference on
-first load and remembers your choice), drag-and-drop file loading, and a
-rejected-line panel that tells you *why* each line was skipped.
+first load and remembers your choice), drag-and-drop file loading, live stats
+(lines, clean, rejected, duplicates, filtered, unique emails/passwords, top
+domain), and a rejected-line panel that tells you *why* each line was skipped.
 
-Anything that could not be parsed is listed in the **Rejected lines** panel with
-its line number and the reason, so nothing disappears silently.
+Anything that did not make it into the clean list — unparseable **or filtered
+out by a rule** — is listed in the **Rejected lines** panel with its line
+number and the reason (`domain excluded`, `password shorter than 8`, …), so
+nothing disappears silently.
+
+## Why this one beats most combo cleaners
+
+Most combo tools make you choose between convenience and privacy. This one
+doesn't:
+
+- **Your list never leaves the tab.** Online cleaners upload your credentials
+  to a backend "for processing". This page makes zero network requests — the
+  whole pipeline (parse → filter → dedupe → sort → split → zip) runs in your
+  browser, so it even works from `file://`.
+- **Big files stay fast.** The test suite ships a 100k-line benchmark with a
+  time budget; most web tools start choking or queueing well before that.
+- **Splitting is a first-class citizen.** Lines-per-file, N even files, or one
+  file per domain, exported as a real `.zip` — no server-side file handling,
+  no 10 MB upload cap, no waiting in a queue.
+- **Filters explain themselves.** Every dropped line lands in the rejected
+  panel with its reason, and filtered rows do not eat de-duplication slots
+  (a duplicate kept from an excluded domain still survives).
 
 ## Deploying to Vercel
 
 The site is fully static — no functions, no environment variables, no secrets.
-`npm run build` copies the five files the site needs into `dist/`, and
+`npm run build` copies the six files the site needs into `dist/`, and
 `vercel.json` tells Vercel to run that build and serve `dist/` only, so dev
 files (`tests/`, `package.json`, `vercel.json`) can never reach a public URL.
 
@@ -84,8 +120,9 @@ After that it is fully hands-off:
 
 ### What gets deployed
 
-`index.html`, `styles.css`, `app.js`, `src/core.js`, and `robots.txt` — run
-`npm run build` and inspect `dist/` to see exactly that list.
+`index.html`, `styles.css`, `app.js`, `src/core.js`, `src/zip.js`, and
+`robots.txt` — run `npm run build` and inspect `dist/` to see exactly that
+list.
 
 `vercel.json` also carries the response headers: `X-Content-Type-Options:
 nosniff`, `Referrer-Policy: no-referrer`, a restrictive `Permissions-Policy`
@@ -105,18 +142,24 @@ else — the host only serves the five static files.
 ## Development
 
 ```bash
-npm test           # 49 tests: parser, UI, deploy artifact, stylesheet
+npm test           # 69 tests: parser, zip, UI, deploy artifact, stylesheet
 ```
 
 - `src/core.js` — the parsing engine. No DOM, no dependencies, UMD-wrapped so
   the browser and the Node tests load the identical file.
+- `src/zip.js` — the dependency-free ZIP writer behind the split→.zip export.
 - `app.js` — UI wiring only.
 - `vercel.json` — the entire Vercel deployment config (build command, output
   directory, response headers).
 - `scripts/build.js` — dependency-free copy of the site into `dist/`.
-- `tests/core.test.js` — parser behaviour.
+- `tests/core.test.js` — parser behaviour, filters, case options, sorting,
+  splitting, plus a 100k-line performance budget.
+- `tests/zip.test.js` — walks the produced archives the way a real unzip tool
+  would (EOCD → central directory → local headers) and verifies every name,
+  CRC and byte.
 - `tests/ui.test.js` — boots the real `index.html` in jsdom, runs the real
-  `app.js`, and asserts on what the page actually renders.
+  `app.js`, and asserts on what the page actually renders — including the
+  split→zip wiring.
 - `tests/build.test.js` — runs the build and asserts `dist/` contains exactly
   the site and none of the dev files, and that `vercel.json` is well-formed
   and still ships the right headers.

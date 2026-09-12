@@ -16,11 +16,12 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'dist');
 
-// The complete list of files the deployed site needs. The first four are what
-// the page requests; robots.txt is served as a plain file at the site root.
-// Response headers live in vercel.json, which Vercel reads from the project
-// root — it is configuration, so it never gets deployed itself.
-const FILES = ['index.html', 'styles.css', 'app.js', 'src/core.js', 'robots.txt'];
+// The complete list of files the deployed site needs. The first five are what
+// the page requests (core.js + zip.js are the dependency-free engines);
+// robots.txt is served as a plain file at the site root. Response headers
+// live in vercel.json, which Vercel reads from the project root — it is
+// configuration, so it never gets deployed itself.
+const FILES = ['index.html', 'styles.css', 'app.js', 'src/core.js', 'src/zip.js', 'robots.txt'];
 
 // Fail loudly rather than deploying a broken page.
 for (const rel of FILES) {

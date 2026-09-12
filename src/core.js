@@ -97,7 +97,7 @@
     return EMAIL_LOOSE.test(cleaned) || EMAIL_LOOSE.test(String(s || '').trim());
   }
 
-  /** Drop a URL scheme prefix so "https://john@x.com" can be recognised as an email. */
+  /** Strip a URL scheme prefix so "https://john@x.com" can be recognised as an email. */
   function stripScheme(s) {
     return String(s == null ? '' : s).trim().replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, '');
   }
@@ -110,18 +110,24 @@
    */
   const DOUBLED_LABEL = /\.([A-Za-z]{2,})\.\1$/i;
 
-
-  function cleanEmail(raw, options) {
-    let email = tidy(raw).toLowerCase();
-    // Trailing dot(s) before the domain, or a stray dot gluing two domains: a@b.com.x
-    // A dot immediately before the @ is always a typo ("john.@gmail.com").
-    // Only that one — dots inside the local part are legitimate ("john.doe@").
+  /** Normalise an email without touching its case (auto-fixes only). */
+  function normalizeEmail(raw, options) {
+    let email = tidy(raw);
     if (options && options.autoFix) {
+      // A dot immediately before the @ is always a typo ("john.@gmail.com").
+      // Only that one — dots inside the local part are legitimate ("john.doe@").
       email = email.replace(/\.(?=@)/, '');
       email = email.replace(DOUBLED_LABEL, '.$1');
-      for (const [re, fix] of DOMAIN_FIXES) email = email.replace(re, fix);
+      // Only rewrite a domain that is actually misspelled; a correct domain
+      // keeps its original casing ("Gmail.COM" survives "as pasted" mode).
+      for (const [re, fix] of DOMAIN_FIXES) email = email.replace(re, (m) => (m.toLowerCase() === fix ? m : fix));
     }
     return email;
+  }
+
+  /** Normalise + lowercase. The canonical form used for validation and dedupe. */
+  function cleanEmail(raw, options) {
+    return normalizeEmail(raw, options).toLowerCase();
   }
 
   function validateEmail(email, strict) {
@@ -136,6 +142,38 @@
     if (strict && !EMAIL_STRICT.test(email)) return 'fails strict pattern';
     if (!strict && !EMAIL_LOOSE.test(email)) return 'not email-shaped';
     return null;
+  }
+
+  // --------------------------------------------------------------------------
+  // Case + domain-list helpers
+  // --------------------------------------------------------------------------
+
+  /**
+   * Apply a case mode to an email or password.
+   * 'lower' and 'upper' operate on the canonical (lower-cased) value so the
+   * result is well-defined; 'keep' returns the value as parsed.
+   */
+  function applyCase(canonical, original, mode) {
+    if (mode === 'upper') return String(canonical == null ? '' : canonical).toUpperCase();
+    if (mode === 'keep') return String(original == null ? '' : original);
+    return String(canonical == null ? '' : canonical).toLowerCase(); // 'lower' (default)
+  }
+
+  /** Parse a comma/space/semicolon-separated list of domains into clean tokens. */
+  function parseDomainList(text) {
+    return String(text == null ? '' : text)
+      .split(/[,;|\s]+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  /**
+   * Does domain match a filter token? Exact domain match, or the token is a
+   * TLD/domain suffix ("co.uk" matches "mail.example.co.uk").
+   */
+  function domainMatches(domain, token) {
+    if (!domain || !token) return false;
+    return domain === token || domain.endsWith('.' + token);
   }
 
   // --------------------------------------------------------------------------
@@ -184,7 +222,10 @@
 
   /**
    * Parse one raw line.
-   * @returns {{ok:boolean, email?:string, pass?:string, reason?:string, source:string, line:number, raw:string}}
+   * @returns {{ok:boolean, email?:string, emailKeep?:string, pass?:string, reason?:string, source:string, line:number, raw:string}}
+   *
+   * On success: `email` is the canonical lower-cased address, `emailKeep` the
+   * same address with its original casing (after auto-fixes), `pass` as parsed.
    */
   function parseLine(rawLine, lineNumber, options) {
     const opts = Object.assign({ strict: false, autoFix: false, allowEmptyPass: false, parseHeaders: false }, options || {});
@@ -250,38 +291,65 @@
 
     if (emailRaw == null) return Object.assign(base, { ok: false, reason: 'no email found' });
 
-    const email = cleanEmail(emailRaw, opts);
+    const emailKeep = normalizeEmail(emailRaw, opts);
+    const email = emailKeep.toLowerCase();
     const pass = tidy(passRaw);
 
     const emailProblem = validateEmail(email, opts.strict);
     if (emailProblem) return Object.assign(base, { ok: false, reason: 'invalid email: ' + emailProblem, email, pass });
     if (!pass && !opts.allowEmptyPass) return Object.assign(base, { ok: false, reason: 'missing password', email, pass });
 
-    return Object.assign(base, { ok: true, email, pass, source: how });
+    return Object.assign(base, { ok: true, email, emailKeep, pass, source: how });
   }
 
   // --------------------------------------------------------------------------
   // Bulk pipeline
   // --------------------------------------------------------------------------
 
+  /** Deterministic PRNG (mulberry32) so "shuffle" is stable per seed. */
+  function mulberry32(seed) {
+    let a = (seed | 0) >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const domainOf = (email) => String(email).split('@')[1] || '?';
+
   /**
    * Turn a blob of messy text into a clean, de-duplicated list.
    *
    * @param {string} text
    * @param {object} options
-   *   strict         {boolean} require the email to match a strict pattern
-   *   autoFix        {boolean} repair common domain typos / stray dots
-   *   allowEmptyPass {boolean} keep entries that have an email but no password
-   *   parseHeaders   {boolean} treat "email,password" header rows as data
-   *   dedupe         {'email'|'pair'|'none'}
-   *   sort           {'none'|'email-asc'|'email-desc'|'pass-asc'|'source'}
+   *   strict           {boolean} require the email to match a strict pattern
+   *   autoFix          {boolean} repair common domain typos / stray dots
+   *   allowEmptyPass   {boolean} keep entries that have an email but no password
+   *   parseHeaders     {boolean} treat "email,password" header rows as data
+   *   dedupe           {'email'|'pair'|'none'}
+   *   sort             {'none'|'source'|'email-asc'|'email-desc'|'pass-asc'|'domain'|'shuffle'}
+   *   shuffleSeed      {number} seed for the deterministic 'shuffle' sort
+   *   emailCase        {'lower'|'keep'|'upper'} output casing for emails
+   *   passCase         {'keep'|'lower'|'upper'} output casing for passwords
+   *   domainKeep       {string} comma-separated domains to KEEP ("" = all)
+   *   domainSkip       {string} comma-separated domains to DROP ("")
+   *   minPassLen       {number} drop passwords shorter than this (0 = off)
+   *   maxPassLen       {number} drop passwords longer than this (0 = off)
+   *   passNeedsDigit   {boolean} drop passwords containing no 0-9
    * @returns {{entries:Array, rejected:Array, stats:object}}
+   *
+   * Entries carry both the canonical form (`email`, `pass`) and the display
+   * form (`emailOut`, `passOut`) after case options are applied.
    */
   function process(text, options) {
-    const opts = Object.assign(
-      { strict: false, autoFix: false, allowEmptyPass: false, parseHeaders: false, dedupe: 'email', sort: 'none' },
-      options || {}
-    );
+    const opts = Object.assign({
+      strict: false, autoFix: false, allowEmptyPass: false, parseHeaders: false,
+      dedupe: 'email', sort: 'none', shuffleSeed: 1,
+      emailCase: 'lower', passCase: 'keep',
+      domainKeep: '', domainSkip: '', minPassLen: 0, maxPassLen: 0, passNeedsDigit: false,
+    }, options || {});
 
     const raw = String(text == null ? '' : text);
     // An empty box is zero lines, not one blank line.
@@ -295,37 +363,86 @@
       else rejected.push(res);
     });
 
-    // ---- de-duplicate -------------------------------------------------
+    // ---- case options ------------------------------------------------------
+    // Canonical (lower-cased) values keep driving validation/dedupe/stats;
+    // the display values are what the user actually gets out.
+    for (const e of entries) {
+      e.emailOut = applyCase(e.email, e.emailKeep || e.email, opts.emailCase);
+      e.passOut = applyCase(e.pass, e.pass, opts.passCase);
+    }
+
+    // ---- filters (before dedupe: a dropped row must not eat a dedupe slot) --
+    const keepList = parseDomainList(opts.domainKeep);
+    const skipList = parseDomainList(opts.domainSkip);
+    const minLen = Math.max(0, parseInt(opts.minPassLen, 10) || 0);
+    const maxLen = Math.max(0, parseInt(opts.maxPassLen, 10) || 0);
+    let filtered = 0;
+    const surviving = [];
+    for (const e of entries) {
+      const domain = domainOf(e.email);
+      let fail = null;
+      if (keepList.length && !keepList.some((t) => domainMatches(domain, t))) fail = 'domain not in keep list';
+      else if (skipList.length && skipList.some((t) => domainMatches(domain, t))) fail = 'domain excluded';
+      else if (minLen > 0 && e.passOut.length < minLen) fail = 'password shorter than ' + minLen;
+      else if (maxLen > 0 && e.passOut.length > maxLen) fail = 'password longer than ' + maxLen;
+      else if (opts.passNeedsDigit && !/[0-9]/.test(e.passOut)) fail = 'password has no digit';
+      if (fail) {
+        filtered++;
+        rejected.push(Object.assign({}, e, { ok: false, reason: fail, filtered: true, source: 'filter' }));
+        continue;
+      }
+      surviving.push(e);
+    }
+
+    // ---- de-duplicate -------------------------------------------------------
     const seen = new Map();
     const kept = [];
     let dupes = 0;
     if (opts.dedupe === 'none') {
-      kept.push(...entries);
+      kept.push(...surviving);
     } else {
-      for (const e of entries) {
-        const key = opts.dedupe === 'pair' ? e.email + '\u0000' + e.pass : e.email;
+      for (const e of surviving) {
+        const key = opts.dedupe === 'pair' ? e.email + '\u0000' + e.passOut : e.email;
         if (seen.has(key)) { dupes++; continue; }
         seen.set(key, true);
         kept.push(e);
       }
     }
 
-    // ---- sort ---------------------------------------------------------
-    const sorted = kept.slice();
+    // ---- sort ----------------------------------------------------------------
     const byEmailAsc = (a, b) => a.email.localeCompare(b.email, 'en', { sensitivity: 'base' }) || a.line - b.line;
+    const sorted = kept.slice();
     if (opts.sort === 'email-asc') sorted.sort(byEmailAsc);
     else if (opts.sort === 'email-desc') sorted.sort((a, b) => -byEmailAsc(a, b));
-    else if (opts.sort === 'pass-asc') sorted.sort((a, b) => a.pass.localeCompare(b.pass) || byEmailAsc(a, b));
+    else if (opts.sort === 'pass-asc') sorted.sort((a, b) => a.passOut.localeCompare(b.passOut) || byEmailAsc(a, b));
+    else if (opts.sort === 'domain') {
+      sorted.sort((a, b) => {
+        const da = domainOf(a.email);
+        const db = domainOf(b.email);
+        return da.localeCompare(db, 'en') || byEmailAsc(a, b);
+      });
+    }
+    else if (opts.sort === 'shuffle') {
+      const rand = mulberry32(opts.shuffleSeed);
+      for (let i = sorted.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const t = sorted[i]; sorted[i] = sorted[j]; sorted[j] = t;
+      }
+    }
     else if (opts.sort === 'source') sorted.sort((a, b) => a.line - b.line);
 
+    // ---- stats -----------------------------------------------------------------
     const byReason = {};
     for (const r of rejected) byReason[r.reason] = (byReason[r.reason] || 0) + 1;
 
     const domains = {};
     for (const e of sorted) {
-      const d = e.email.split('@')[1] || '?';
+      const d = domainOf(e.email);
       domains[d] = (domains[d] || 0) + 1;
     }
+
+    const uniqueEmails = new Set(sorted.map((e) => e.email)).size;
+    const uniquePasswords = new Set(sorted.map((e) => e.passOut)).size;
 
     return {
       entries: sorted,
@@ -335,6 +452,9 @@
         valid: sorted.length,
         rejected: rejected.length,
         duplicatesRemoved: dupes,
+        filtered,
+        uniqueEmails,
+        uniquePasswords,
         emptyLines: rejected.filter((r) => r.reason === 'empty line').length,
         comments: rejected.filter((r) => r.reason === 'comment').length,
         headers: rejected.filter((r) => r.reason === 'header row').length,
@@ -348,16 +468,20 @@
   // Output formatting
   // --------------------------------------------------------------------------
 
+  const emailOf = (e) => e.emailOut != null ? e.emailOut : e.email;
+  const passOf = (e) => e.passOut != null ? e.passOut : e.pass;
+
   const FORMATS = {
-    'email:pass': (e) => e.email + ':' + e.pass,
-    'email;pass': (e) => e.email + ';' + e.pass,
-    'email|pass': (e) => e.email + '|' + e.pass,
-    'email=pass': (e) => e.email + '=' + e.pass,
-    'email<tab>pass': (e) => e.email + '\t' + e.pass,
-    csv: (e) => csvField(e.email) + ',' + csvField(e.pass),
-    jsonl: (e) => JSON.stringify({ email: e.email, password: e.pass }),
-    'emails only': (e) => e.email,
-    'passwords only': (e) => e.pass,
+    'email:pass': (e) => emailOf(e) + ':' + passOf(e),
+    'email;pass': (e) => emailOf(e) + ';' + passOf(e),
+    'email|pass': (e) => emailOf(e) + '|' + passOf(e),
+    'email=pass': (e) => emailOf(e) + '=' + passOf(e),
+    'email<tab>pass': (e) => emailOf(e) + '\t' + passOf(e),
+    csv: (e) => csvField(emailOf(e)) + ',' + csvField(passOf(e)),
+    jsonl: (e) => JSON.stringify({ email: emailOf(e), password: passOf(e) }),
+    'emails only': (e) => emailOf(e),
+    'usernames only': (e) => emailOf(e).split('@')[0],
+    'passwords only': (e) => passOf(e),
   };
 
   function csvField(v) {
@@ -370,6 +494,55 @@
     return entries.map(fn).join('\n');
   }
 
+  // --------------------------------------------------------------------------
+  // Splitting (for the .zip export)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Split finished output text into file contents.
+   * @param {string} text  the full output (any format)
+   * @param {'lines'|'count'} mode  'lines' = at most `value` lines per file,
+   *                                'count' = exactly `value` roughly-even files
+   * @param {number} value
+   * @returns {string[]} file contents (empty input -> [])
+   */
+  function splitText(text, mode, value) {
+    const raw = String(text == null ? '' : text);
+    const lines = raw === '' ? [] : raw.split(/\r\n|\r|\n/);
+    const v = Math.max(1, Math.floor(Number(value) || 1));
+    const out = [];
+    if (mode === 'count') {
+      const base = Math.floor(lines.length / v);
+      const extra = lines.length % v;
+      let start = 0;
+      for (let i = 0; i < v; i++) {
+        const n = base + (i < extra ? 1 : 0);
+        if (n > 0) out.push(lines.slice(start, start + n).join('\n'));
+        start += n;
+      }
+    } else {
+      for (let i = 0; i < lines.length; i += v) out.push(lines.slice(i, i + v).join('\n'));
+    }
+    return out;
+  }
+
+  /**
+   * Group entries by email domain, one entry per domain, alphabetised by
+   * domain. Each group carries a pre-formatted text payload.
+   */
+  function groupByDomain(entries, formatName) {
+    const map = new Map();
+    for (const e of entries || []) {
+      const d = domainOf(e.email);
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(e);
+    }
+    const out = [];
+    for (const [d, list] of map) out.push({ name: d, text: format(list, formatName) });
+    out.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    return out;
+  }
+
   return {
     EMAIL_LOOSE,
     EMAIL_STRICT,
@@ -379,9 +552,15 @@
     process,
     format,
     cleanEmail,
+    normalizeEmail,
     validateEmail,
     splitUnquoted,
     tidy,
     unquote,
+    applyCase,
+    parseDomainList,
+    domainMatches,
+    splitText,
+    groupByDomain,
   };
 });

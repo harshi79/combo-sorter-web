@@ -2,9 +2,9 @@
   "name": "combo-sorter-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Paste messy bulk email:pass text in any variant, get one clean de-duplicated list back. 100% client-side.",
+  "description": "Paste messy bulk email:pass text in any variant, get one clean, de-duplicated, filtered list back — split to .zip, all 100% in your browser.",
   "scripts": {
-    "test": "node --test tests/core.test.js tests/ui.test.js tests/build.test.js tests/styles.test.js",
+    "test": "node --test tests/core.test.js tests/zip.test.js tests/ui.test.js tests/build.test.js tests/styles.test.js",
     "start": "python3 -m http.server 8080 --bind 0.0.0.0",
     "build": "node scripts/build.js"
   },
