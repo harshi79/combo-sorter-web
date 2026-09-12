@@ -23,9 +23,12 @@
     rejectedPanel: $('rejectedPanel'),
     rejectedList: $('rejectedList'),
     toast: $('toast'),
+    themeBtn: $('themeBtn'),
+    inputMeta: $('inputMeta'),
   };
 
   const STORAGE_KEY = 'combo-sorter-web:v1';
+  const THEME_KEY = 'combo-sorter-web:theme';
   const SETTINGS = ['autoFix', 'strict', 'allowEmptyPass', 'parseHeaders', 'dedupe', 'sort', 'format'];
 
   let lastResult = null;
@@ -39,6 +42,23 @@
     els.format.appendChild(opt);
   });
   els.format.value = 'email:pass';
+
+  // ---------------------------------------------------------------- theme
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (_) { /* ignore */ }
+  }
+
+  function initTheme() {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(THEME_KEY);
+    } catch (_) { /* ignore */ }
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    applyTheme(saved || (prefersLight ? 'light' : 'dark'));
+  }
 
   // ---------------------------------------------------------------- persistence
   function save() {
@@ -127,12 +147,21 @@
     };
   }
 
+  function updateMeta() {
+    const v = els.input.value;
+    const lines = v === '' ? 0 : v.split(/\r\n|\r|\n/).length;
+    const chars = v.length;
+    els.inputMeta.textContent =
+      lines.toLocaleString() + (lines === 1 ? ' line' : ' lines') + ' · ' + chars.toLocaleString() + ' chars';
+  }
+
   function run() {
     const started = performance.now();
     lastResult = ComboCore.process(els.input.value, currentOptions());
     els.output.value = ComboCore.format(lastResult.entries, els.format.value);
     renderStats(lastResult.stats);
     renderRejected(lastResult.rejected);
+    updateMeta();
     save();
     const ms = Math.round(performance.now() - started);
     if (ms > 250) showToast('Parsed ' + lastResult.stats.lines.toLocaleString() + ' lines in ' + ms + ' ms');
@@ -250,6 +279,11 @@
   els.input.addEventListener('input', scheduleRun);
   SETTINGS.forEach((k) => els[k].addEventListener('change', run));
 
+  els.themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+  });
+
   $('clearBtn').addEventListener('click', () => {
     els.input.value = '';
     els.output.value = '';
@@ -305,6 +339,7 @@
   });
 
   // ---------------------------------------------------------------- boot
+  initTheme();
   restore();
   run();
 })();

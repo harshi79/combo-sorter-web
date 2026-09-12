@@ -150,6 +150,29 @@ test('settings and input survive a reload (localStorage)', () => {
   assert.equal(doc.getElementById('output').value, 'keepme@gmail.com:pw');
 });
 
+test('theme toggle flips data-theme and persists it', () => {
+  const { window, document } = loadPage();
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'dark', 'dark is the default');
+  document.getElementById('themeBtn').click();
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'light');
+  assert.equal(window.localStorage.getItem('combo-sorter-web:theme'), 'light');
+  document.getElementById('themeBtn').click();
+  assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
+  assert.equal(window.localStorage.getItem('combo-sorter-web:theme'), 'dark');
+});
+
+test('input meta reports line and character counts', () => {
+  const { document } = loadPage();
+  assert.equal(document.getElementById('inputMeta').textContent, '0 lines · 0 chars');
+  const input = document.getElementById('input');
+  input.value = 'a@b.com:1\nc@d.com:2';
+  input.dispatchEvent(new input.ownerDocument.defaultView.Event('input'));
+  return new Promise((resolve) => setTimeout(() => {
+    assert.equal(document.getElementById('inputMeta').textContent, '2 lines · 19 chars');
+    resolve();
+  }, 200));
+});
+
 test('the page never makes a network request', () => {
   // Comments legitimately contain example URLs (smtps://u:p@relay:587), so strip
   // them before scanning for anything that would actually touch the network.

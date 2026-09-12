@@ -52,6 +52,10 @@ Passwords may contain the separator — `john@gmail.com:pass:with:colons` keeps
 - **Output format** — `email:pass`, `;`, `|`, `=`, TAB, CSV (properly quoted),
   JSON Lines, emails only, passwords only.
 
+The interface has a dark/light theme toggle (it follows your OS preference on
+first load and remembers your choice), drag-and-drop file loading, and a
+rejected-line panel that tells you *why* each line was skipped.
+
 Anything that could not be parsed is listed in the **Rejected lines** panel with
 its line number and the reason, so nothing disappears silently.
 
@@ -118,7 +122,7 @@ or anywhere else — the host only serves the four static files.
 ## Development
 
 ```bash
-npm test           # 38 tests: parser, UI (jsdom drives the real page), build output
+npm test           # 48 tests: parser, UI, deploy artifact, stylesheet
 ```
 
 - `src/core.js` — the parsing engine. No DOM, no dependencies, UMD-wrapped so
@@ -130,6 +134,10 @@ npm test           # 38 tests: parser, UI (jsdom drives the real page), build ou
   `app.js`, and asserts on what the page actually renders.
 - `tests/build.test.js` — runs the build and asserts `dist/` contains exactly
   the site and none of the dev files.
+- `tests/styles.test.js` — parses `styles.css` with `css-tree` and checks that
+  every `var()` is defined, every colour token is overridden by the light theme,
+  every class selector is actually rendered, and every keyframe name exists.
+  There is no browser in CI, so this is the substitute for eyeballing the CSS.
 
 ## License
 
