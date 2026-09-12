@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combo Sorter — clean up messy email:pass lists</title>
+<meta name="description" content="Paste bulk email:pass text in any format and get one clean, de-duplicated list. Everything runs in your browser.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧹</text></svg>">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18M6 12h12M10 18h4"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>Combo Sorter</h1>
+      <p class="tagline">Any messy variant in → one clean <code>email:pass</code> list out</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="privacy" title="No network requests are made. Your data never leaves this tab.">
+      <span class="pulse" aria-hidden="true"></span>
+      <span>Private — nothing leaves this tab</span>
+    </div>
+    <button type="button" id="themeBtn" class="icon-btn" aria-label="Switch colour theme" title="Switch theme">
+      <svg class="i-sun" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+      </svg>
+      <svg class="i-moon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- 1 · INPUT -->
+  <section class="panel panel-input" style="--area:input">
+    <div class="panel-head">
+      <h2><span class="step">1</span> Paste the mess</h2>
+      <div class="panel-actions">
+        <label class="btn" title="Load one or more .txt / .csv files">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          Load file<input type="file" id="fileInput" accept=".txt,.csv,.text,.log,text/plain,text/csv" multiple hidden>
+        </label>
+        <button type="button" class="btn ghost" id="sampleBtn" title="Fill the box with messy sample data">Sample</button>
+        <button type="button" class="btn ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+
+    <textarea id="input" class="mono" spellcheck="false" autocomplete="off" autocapitalize="off"
+      placeholder="Drop anything in here — every line is handled independently:
+
+john@gmail.com:secret123
+john@gmail.com : secret123
+secret123:john@gmail.com
+john@gmail.com | secret123
+john@gmail.com,secret123
+&quot;john@gmail.com&quot;,&quot;secret123&quot;
+https://john@gmail.com:secret123@accounts.example.com/login
+# comments and blank lines are ignored"></textarea>
+
+    <div class="meta-bar"><span id="inputMeta">0 lines</span><span class="kbd-hint">Tip: drop files anywhere on the page</span></div>
+    <div class="dropzone" id="dropzone">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      Drop .txt / .csv files to load them
+    </div>
+  </section>
+
+  <!-- 2 · RULES -->
+  <section class="panel panel-rules" style="--area:rules">
+    <h2><span class="step">2</span> Rules</h2>
+    <div class="rules">
+      <label class="switch">
+        <input type="checkbox" id="autoFix" checked>
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="txt">Auto-fix domain typos<em>gnail.com → gmail.com, stray dots</em></span>
+      </label>
+
+      <label class="switch">
+        <input type="checkbox" id="strict">
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="txt">Strict email check<em>reject anything not a valid address</em></span>
+      </label>
+
+      <label class="switch">
+        <input type="checkbox" id="allowEmptyPass">
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="txt">Keep email-only rows<em>rows that have no password</em></span>
+      </label>
+
+      <label class="switch">
+        <input type="checkbox" id="parseHeaders">
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="txt">Parse header rows<em>treat &quot;email,password&quot; as data</em></span>
+      </label>
+
+      <label class="field">
+        <span class="txt">De-duplicate by<em>which repeat to drop</em></span>
+        <div class="select-wrap">
+          <select id="dedupe">
+            <option value="email" selected>Email (keep first)</option>
+            <option value="pair">Email + password</option>
+            <option value="none">Off — keep every row</option>
+          </select>
+        </div>
+      </label>
+
+      <label class="field">
+        <span class="txt">Sort<em>order of the output</em></span>
+        <div class="select-wrap">
+          <select id="sort">
+            <option value="source" selected>Original order</option>
+            <option value="email-asc">Email A → Z</option>
+            <option value="email-desc">Email Z → A</option>
+            <option value="pass-asc">Password A → Z</option>
+          </select>
+        </div>
+      </label>
+
+      <label class="field">
+        <span class="txt">Output format<em>shape of each row</em></span>
+        <div class="select-wrap">
+          <select id="format"></select>
+        </div>
+      </label>
+    </div>
+  </section>
+
+  <!-- 3 · OUTPUT -->
+  <section class="panel panel-output" style="--area:output">
+    <div class="panel-head">
+      <h2><span class="step">3</span> Clean list</h2>
+      <div class="panel-actions">
+        <button type="button" class="btn primary" id="copyBtn">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          Copy
+        </button>
+        <button type="button" class="btn" id="downloadBtn">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 5-5m-5 5-5-5"/><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>
+          Download
+        </button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <textarea id="output" class="mono" spellcheck="false" readonly placeholder="Your clean list appears here as you type."></textarea>
+  </section>
+
+  <!-- REJECTED -->
+  <section class="panel panel-rejected" id="rejectedPanel" style="--area:rejected" hidden>
+    <div class="panel-head">
+      <h2><span class="warn-dot" aria-hidden="true"></span>Rejected lines</h2>
+      <div class="panel-actions">
+        <button type="button" class="btn ghost" id="copyRejectedBtn">Copy</button>
+        <button type="button" class="btn ghost" id="hideRejectedBtn">Hide</button>
+      </div>
+    </div>
+    <p class="hint">These lines were skipped. Fix them above, or loosen a rule if it's too strict for your data.</p>
+    <div class="rejected-list" id="rejectedList"></div>
+  </section>
+</main>
+
+<footer>
+  <span>Parsed locally in this tab — no server, no analytics, no uploads.</span>
+  <span><a href="https://github.com/harshi79/combo-sorter-web" rel="noopener">MIT licensed</a></span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="src/core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

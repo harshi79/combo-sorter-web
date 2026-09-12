@@ -1,0 +1,4 @@
+# This tool exists to handle credentials, so keep it out of search indexes by
+# default. Delete this file (or change to "Allow: /") if you want it public.
+User-agent: *
+Disallow: /

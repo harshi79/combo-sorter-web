@@ -1,0 +1,15 @@
+# .assetsignore is a safety net, not the primary mechanism.
+#
+# Paths here are resolved against the Pages output directory (`dist`, set in
+# wrangler.toml) — NOT the repo root. scripts/build.js already produces a dist/
+# containing only the six files the site needs, so normally nothing here matches.
+# These patterns only bite if someone points pages_build_output_dir back at ".".
+
+node_modules
+tests
+package.json
+package-lock.json
+wrangler.toml
+.gitignore
+.github
+*.log

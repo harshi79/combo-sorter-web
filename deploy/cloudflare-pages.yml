@@ -1,0 +1,42 @@
+# GitHub Actions workflow for Cloudflare Pages.
+#
+# This file is kept at deploy/cloudflare-pages.yml rather than
+# .github/workflows/ because the automation account used here is not allowed to
+# create workflow files. To enable it, copy it into place:
+#
+#   mkdir -p .github/workflows && cp deploy/cloudflare-pages.yml .github/workflows/deploy.yml
+#
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # devDependencies are needed for the jsdom UI tests.
+      - run: npm ci
+
+      - run: npm test
+
+      # Copies the site into dist/. Dependency-free, but run after ci for clarity.
+      - run: npm run build
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=combo-sorter-web

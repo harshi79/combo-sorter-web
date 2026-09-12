@@ -1,0 +1,10 @@
+# Cloudflare Pages configuration.
+#
+# The site is fully static: no Worker code, no bundling, no transpiling.
+# `npm run build` copies the four files the page actually requests into dist/,
+# and Pages uploads that directory only — so dev files (tests, package.json,
+# this file) can never end up at a public URL.
+
+name = "combo-sorter-web"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-01"
