@@ -6,13 +6,13 @@ seems to use a different separator.
 
 **Everything runs in your browser.** There is no backend, no analytics and no
 upload — the page makes zero network requests, so it is safe to open straight
-from `file://` with sensitive data in the box. Nothing is ever sent to
-Cloudflare or anywhere else.
+from `file://` with sensitive data in the box. Nothing is ever sent to Vercel
+or anywhere else.
 
 ## Try it
 
 ```bash
-npm start          # serves the folder on http://localhost:8080
+npm start          # serves the site on http://localhost:8080
 ```
 
 Or just open `index.html` in a browser — no build step, no dependencies.
@@ -59,81 +59,67 @@ rejected-line panel that tells you *why* each line was skipped.
 Anything that could not be parsed is listed in the **Rejected lines** panel with
 its line number and the reason, so nothing disappears silently.
 
-## Deploying to Cloudflare Pages
+## Deploying to Vercel
 
-The site is fully static — no Worker code, no bundling. `npm run build` copies
-the six files Pages needs into `dist/`, and that directory is the only thing
-uploaded, so dev files (`tests/`, `package.json`, `wrangler.toml`) can never
-reach a public URL.
+The site is fully static — no functions, no environment variables, no secrets.
+`npm run build` copies the five files the site needs into `dist/`, and
+`vercel.json` tells Vercel to run that build and serve `dist/` only, so dev
+files (`tests/`, `package.json`, `vercel.json`) can never reach a public URL.
 
-### Option A — push to deploy (recommended)
+### One-time setup (no env vars, no tokens)
 
-1. In Cloudflare, create a Pages project named `combo-sorter-web`.
-2. Create an API token with **Cloudflare Pages — Edit** permission, and grab
-   your account ID from the dashboard.
-3. In the GitHub repo, add two secrets: `CLOUDFLARE_API_TOKEN` and
-   `CLOUDFLARE_ACCOUNT_ID`.
+1. Make sure the repo is on GitHub.
+2. Open <https://vercel.com/new>, sign in with GitHub, and import the repo.
+3. Press **Deploy**.
 
-The workflow lives at `deploy/cloudflare-pages.yml` — the automation account
-used to build this repo isn't permitted to create files under
-`.github/workflows/`, so copy it into place yourself:
+That is the whole setup. Vercel reads `vercel.json`, which pins the build
+command (`npm run build`) and the output directory (`dist`) — no framework
+preset to pick, no dashboard config, no API token, no GitHub Actions workflow,
+no environment variables.
 
-```bash
-mkdir -p .github/workflows
-cp deploy/cloudflare-pages.yml .github/workflows/deploy.yml
-git add .github/workflows/deploy.yml && git commit -m "Enable Pages deploy" && git push
-```
+After that it is fully hands-off:
 
-After that, every push to `main` runs the tests, builds, and deploys.
-
-If you'd rather not use Actions at all, Option B below needs no workflow.
-
-### Option B — deploy from your machine
-
-```bash
-export CLOUDFLARE_API_TOKEN=...      # Pages: Edit
-export CLOUDFLARE_ACCOUNT_ID=...
-npm run deploy                       # build + wrangler pages deploy
-```
-
-### Local preview of the real Pages runtime
-
-```bash
-npm run pages:dev                    # build + wrangler pages dev dist
-```
-
-This runs Cloudflare's actual `workerd` runtime, so `_headers` is applied for
-real — useful for confirming caching and security headers before you ship.
+- every push to `main` deploys to the production URL,
+- every branch and pull request gets its own preview URL automatically.
 
 ### What gets deployed
 
-`index.html`, `styles.css`, `app.js`, `src/core.js`, plus `_headers` and
-`robots.txt`. Run `npm run build` and inspect `dist/` to see exactly that list.
+`index.html`, `styles.css`, `app.js`, `src/core.js`, and `robots.txt` — run
+`npm run build` and inspect `dist/` to see exactly that list.
 
-`_headers` sets `X-Content-Type-Options: nosniff`, `Referrer-Policy:
-no-referrer`, a restrictive `Permissions-Policy`, and a 1-hour cache on the
-static assets. `robots.txt` blocks crawlers by default, since the tool exists
-to handle credentials — delete it if you want the page indexed.
+`vercel.json` also carries the response headers: `X-Content-Type-Options:
+nosniff`, `Referrer-Policy: no-referrer`, a restrictive `Permissions-Policy`
+on every response, plus a 1-hour cache on the three static assets. There is no
+`X-Frame-Options` / `frame-ancestors` on purpose: the page holds no session
+and no server-side state, so clickjacking has no payoff, and framing it is
+useful (embeds, previews, iframes). Add a rule in `vercel.json` if you
+disagree.
 
-**Note:** hosting on Cloudflare does not change the privacy story. The page
-still makes zero network requests, so pasted data is never sent to Cloudflare
-or anywhere else — the host only serves the four static files.
+`robots.txt` blocks crawlers by default, since the tool exists to handle
+credentials — delete it if you want the page indexed.
+
+**Note:** hosting on Vercel does not change the privacy story. The page still
+makes zero network requests, so pasted data is never sent to Vercel or anywhere
+else — the host only serves the five static files.
 
 ## Development
 
 ```bash
-npm test           # 48 tests: parser, UI, deploy artifact, stylesheet
+npm test           # 49 tests: parser, UI, deploy artifact, stylesheet
 ```
 
 - `src/core.js` — the parsing engine. No DOM, no dependencies, UMD-wrapped so
   the browser and the Node tests load the identical file.
 - `app.js` — UI wiring only.
+- `vercel.json` — the entire Vercel deployment config (build command, output
+  directory, response headers).
 - `scripts/build.js` — dependency-free copy of the site into `dist/`.
 - `tests/core.test.js` — parser behaviour.
 - `tests/ui.test.js` — boots the real `index.html` in jsdom, runs the real
   `app.js`, and asserts on what the page actually renders.
 - `tests/build.test.js` — runs the build and asserts `dist/` contains exactly
-  the site and none of the dev files.
+  the site and none of the dev files, and that `vercel.json` is well-formed
+  and still ships the right headers.
 - `tests/styles.test.js` — parses `styles.css` with `css-tree` and checks that
   every `var()` is defined, every colour token is overridden by the light theme,
   every class selector is actually rendered, and every keyframe name exists.
