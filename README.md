@@ -1,8 +1,8 @@
 # Combo Sorter
 
-Paste bulk `email:pass` data in **any** variant format and get back one clean,
-de-duplicated `email:pass` list. Built for cleaning up exports where every line
-seems to use a different separator.
+Paste a text file or a block of messy lines and get back one clean,
+de-duplicated `email:pass` list. The everyday interface intentionally keeps
+only the simple `email:pass` and `email;pass` formats.
 
 **Everything runs in your browser.** There is no backend, no analytics and no
 upload — the page makes zero network requests, so it is safe to open straight
@@ -15,85 +15,54 @@ or anywhere else.
 npm start          # serves the site on http://localhost:8080
 ```
 
-Or just open `index.html` in a browser — no build step, no dependencies.
+Or open `index.html` directly. There is no build step and no backend.
 
-## What it handles
+## Simple cleanup rules
 
-Every line is parsed independently, so one file can mix all of these:
+The visible interface is deliberately small: load or paste, clean, copy, and
+download. You do not need to choose a separator or configure a parser.
 
-| Input | Result |
-| --- | --- |
-| `john@gmail.com:secret123` | `john@gmail.com:secret123` |
-| `john@gmail.com : secret123` | `john@gmail.com:secret123` |
-| `secret123:john@gmail.com` | `john@gmail.com:secret123` |
-| `john@gmail.com \| secret123` | `john@gmail.com:secret123` |
-| `john@gmail.com,secret123` | `john@gmail.com:secret123` |
-| `john@gmail.com;secret123` / `=secret123` / `<TAB>secret123` | `john@gmail.com:secret123` |
-| `"john@gmail.com","p,ass:word"` | `john@gmail.com:p,ass:word` |
-| `https://john@gmail.com:secret123@accounts.example.com/login` | `john@gmail.com:secret123` |
-| `BOB.Jones@Yahoo.com` | `bob.jones@yahoo.com` (email lower-cased, password case kept) |
-| `carol@gnail.com:pw` *(auto-fix on)* | `carol@gmail.com:pw` |
-| `# comment` / blank line / `email,password` header | skipped |
+Each line is handled on its own:
 
-Passwords may contain the separator — `john@gmail.com:pass:with:colons` keeps
-`pass:with:colons`, because the first delimiter after the email is the split.
+- `email:pass` is kept.
+- `email;pass` is kept.
+- Spaces around the separator are okay.
+- The pair can be buried inside other text; leading and trailing garbage is ignored.
+- A copied Markdown mail link such as
+  `[you@example.com](mailto:you@example.com):secret123` is cleaned to
+  `you@example.com:secret123`.
+- Once the password token ends, all trailing notes or garbage are removed.
+- A line without an email plus `:` or `;` plus a password is ignored.
+- Blank lines are ignored, and repeated email addresses are kept only once.
 
-### Options
+For example:
 
-- **Auto-fix domain typos** — `gnail.com`/`gmial.com`/`yaho.com`/… → correct
-  domain, stray dot before `@` removed, doubled TLD (`gmail.com.com`) collapsed.
-  Deliberately narrow: it never rewrites a real domain such as `sub.example.co.uk`,
-  and a correctly-spelled domain keeps its original casing.
-- **Strict email check** — reject anything that is not a fully valid address
-  (default is lenient, so unusual but real addresses survive).
-- **Keep email-only rows** — keep lines that have an email but no password.
-- **Parse header rows** — treat `email,password` as data instead of a header.
-- **Require digit in password** — drop rows whose password contains no `0-9`.
-- **Keep only these domains / Skip these domains** — comma-separated,
-  case-insensitive; TLD suffixes work (`co.uk` matches `mail.example.co.uk`).
-  Skip wins over keep when a domain hits both lists.
-- **Min / Max pass length** — drop passwords that are too short or too long.
-- **Email case / Password case** — lowercase, as pasted, or UPPERCASE.
-  De-duplication always compares case-insensitively, so `A@x.com:Pass` and
-  `a@x.com:pass` still collapse.
-- **De-duplicate by** — email (keeps the first occurrence), email+password, or off.
-- **Sort** — original order, email A→Z / Z→A, password A→Z, domain A→Z (then
-  email), or a **seeded shuffle** — deterministic per seed, so the list does
-  not re-jitter on every keystroke and the same seed reproduces the same order.
-- **Output format** — `email:pass`, `;`, `|`, `=`, TAB, CSV (properly quoted),
-  JSON Lines, emails only, usernames only (local part, no domain), passwords only.
-- **Split → .zip** — split the finished output by *lines per file*, into *N
-  even files*, or into *one file per domain*, and download it as a single
-  `.zip`. The archive is built in-tab by a small dependency-free ZIP writer
-  (`src/zip.js`) that produces standard stored-ZIP output any unzip tool opens.
+```text
+[arenai@gmail.com](mailto:arenai@gmail.com):arena123 dtae 12348ufdj, random notes
+yes sure, this is not a credential line
+cosmo@gmail.com: halo jsdjiejdcjedc
+```
 
-The interface has a dark/light theme toggle (it follows your OS preference on
-first load and remembers your choice), drag-and-drop file loading, live stats
-(lines, clean, rejected, duplicates, filtered, unique emails/passwords, top
-domain), and a rejected-line panel that tells you *why* each line was skipped.
+becomes:
 
-Anything that did not make it into the clean list — unparseable **or filtered
-out by a rule** — is listed in the **Rejected lines** panel with its line
-number and the reason (`domain excluded`, `password shorter than 8`, …), so
-nothing disappears silently.
+```text
+arenai@gmail.com:arena123
+cosmo@gmail.com:halo
+```
 
-## Why this one beats most combo cleaners
+Everything runs locally in the browser. Your pasted data never leaves the tab.
 
-Most combo tools make you choose between convenience and privacy. This one
-doesn't:
+## Why this one is simple and private
 
-- **Your list never leaves the tab.** Online cleaners upload your credentials
-  to a backend "for processing". This page makes zero network requests — the
-  whole pipeline (parse → filter → dedupe → sort → split → zip) runs in your
-  browser, so it even works from `file://`.
-- **Big files stay fast.** The test suite ships a 100k-line benchmark with a
-  time budget; most web tools start choking or queueing well before that.
-- **Splitting is a first-class citizen.** Lines-per-file, N even files, or one
-  file per domain, exported as a real `.zip` — no server-side file handling,
-  no 10 MB upload cap, no waiting in a queue.
-- **Filters explain themselves.** Every dropped line lands in the rejected
-  panel with its reason, and filtered rows do not eat de-duplication slots
-  (a duplicate kept from an excluded domain still survives).
+- **No customization maze.** The page has one clear path: load or paste,
+  clean, copy, or download.
+- **Garbage is safe to paste.** Each line is isolated. Only the first valid
+  credential token is returned; prose on the same line does not carry over.
+- **Duplicates are removed.** The first occurrence of an email wins.
+- **Nothing is uploaded.** Parsing, deduplication, and exporting happen in
+  this tab. The page makes no network requests and also works from `file://`.
+- **Large files stay local.** The parser processes the text in the browser,
+  with no server upload limit or queue.
 
 ## Deploying to Vercel
 

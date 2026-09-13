@@ -120,7 +120,7 @@
     const parts = [
       chip('lines', stats.lines),
       chip('clean', stats.valid, stats.valid ? 'good' : ''),
-      chip('rejected', stats.rejected, stats.rejected ? 'bad' : 'good'),
+      chip('ignored', stats.rejected, stats.rejected ? 'bad' : 'good'),
     ];
     if (stats.duplicatesRemoved) parts.push(chip('duplicates removed', stats.duplicatesRemoved, 'warn'));
     if (stats.filtered) parts.push(chip('filtered', stats.filtered, 'warn'));
@@ -426,5 +426,8 @@
   // ---------------------------------------------------------------- boot
   initTheme();
   restore();
+  // The visible tool always produces the one simple format requested by the
+  // user, even if an older saved session used CSV/JSONL output.
+  els.format.value = 'email:pass';
   run();
 })();

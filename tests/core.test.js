@@ -11,6 +11,22 @@ test('plain email:pass', () => {
   assert.equal(r.pass, 'secret123');
 });
 
+test('email:pass survives arbitrary surrounding garbage', () => {
+  const input = [
+    'random words before user.one@example.com:Pass-1 and notes after',
+    '<user.two@example.com>; Pass-2 trailing garbage',
+    '[user.three@example.com](mailto:user.three@example.com):Pass-3 more text',
+    'this line has no credential pair at all',
+  ].join('\n');
+  const out = core.process(input);
+  assert.equal(core.format(out.entries, 'email:pass'), [
+    'user.one@example.com:Pass-1',
+    'user.two@example.com:Pass-2',
+    'user.three@example.com:Pass-3',
+  ].join('\n'));
+  assert.equal(out.entries.length, 3);
+});
+
 test('spaced variants: email : pass', () => {
   for (const line of ['john@gmail.com : secret123', '  john@gmail.com:secret123  ', 'john@gmail.com :  secret123 ']) {
     const r = core.parseLine(line, 1);
