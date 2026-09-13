@@ -27,6 +27,7 @@ Each line is handled on its own:
 - `email:pass` is kept.
 - `email;pass` is kept.
 - Spaces around the separator are okay.
+- The pair can be buried inside other text; leading and trailing garbage is ignored.
 - A copied Markdown mail link such as
   `[you@example.com](mailto:you@example.com):secret123` is cleaned to
   `you@example.com:secret123`.

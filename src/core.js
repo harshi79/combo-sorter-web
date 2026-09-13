@@ -221,6 +221,32 @@
   }
 
   /**
+   * Find a normal email followed by `:` or `;` anywhere in a messy line.
+   * Leading labels, quotes, brackets, prose, and trailing notes are ignored.
+   * The first non-whitespace token after the separator is the password.
+   */
+  function splitEmbeddedPair(line) {
+    const re = new RegExp(EMAIL_LOOSE.source, 'gi');
+    let match;
+    while ((match = re.exec(String(line || '')))) {
+      const after = String(line || '').slice(match.index + match[0].length);
+      const pair = after.match(/^\s*([:;])\s*(\S+)/);
+      if (pair) {
+        return {
+          email: match[0],
+          pass: pair[2],
+          delim: pair[1],
+          order: 'email-first',
+          embedded: true,
+        };
+      }
+      // Avoid an infinite loop for a zero-length regex match.
+      if (match[0] === '') re.lastIndex++;
+    }
+    return null;
+  }
+
+  /**
    * Markdown mail links are common when credentials are copied from chat or
    * another rich-text source. Handle the link as an email token, not as the
    * first colon-delimited pair (`mailto:` contains a colon of its own).
@@ -294,6 +320,18 @@
     // colon gets read as the email/password separator.
     const schemeMatch = line.match(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)(.*)$/);
     const body = schemeMatch ? schemeMatch[2] : line;
+
+    // For ordinary messy prose, search for the credential pair anywhere in the
+    // line instead of requiring the email to be the first character.
+    if (!schemeMatch && emailRaw == null) {
+      const embeddedPair = splitEmbeddedPair(body);
+      if (embeddedPair) {
+        emailRaw = embeddedPair.email;
+        passRaw = embeddedPair.pass;
+        parsedDelim = embeddedPair.delim;
+        how = 'embedded email pair (' + JSON.stringify(embeddedPair.delim) + ')';
+      }
+    }
 
     if (schemeMatch && emailRaw == null) {
       // The line is a URL, so read it as URL userinfo: "email:password@host/path".
