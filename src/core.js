@@ -221,6 +221,44 @@
   }
 
   /**
+   * Markdown mail links are common when credentials are copied from chat or
+   * another rich-text source. Handle the link as an email token, not as the
+   * first colon-delimited pair (`mailto:` contains a colon of its own).
+   *
+   * Only the first non-whitespace token after the `:` or `;` is the password.
+   * Everything after that is commentary and must not leak into the output.
+   */
+  function splitMarkdownMailto(line) {
+    const match = String(line || '').match(
+      /\[([^\]\s]+)\]\(\s*mailto:([^\)\s]+)\s*\)\s*([:;])\s*(\S+)/i
+    );
+    if (!match) return null;
+
+    const displayEmail = tidy(match[1]);
+    const targetEmail = tidy(match[2]);
+    const email = looksLikeEmail(displayEmail) ? displayEmail : targetEmail;
+    if (!looksLikeEmail(email)) return null;
+
+    return {
+      email,
+      pass: match[4],
+      delim: match[3],
+      order: 'email-first',
+      markdown: true,
+    };
+  }
+
+  /** Keep the credential token and discard prose after it for : and ; rows. */
+  function firstCredentialToken(value, delim) {
+    const clean = tidy(value);
+    if (delim === ':' || delim === ';') {
+      const token = clean.match(/^\S+/);
+      return token ? token[0] : '';
+    }
+    return clean;
+  }
+
+  /**
    * Parse one raw line.
    * @returns {{ok:boolean, email?:string, emailKeep?:string, pass?:string, reason?:string, source:string, line:number, raw:string}}
    *
@@ -240,13 +278,24 @@
     let emailRaw = null;
     let passRaw = null;
     let how = null;
+    let parsedDelim = null;
+
+    // A copied Markdown mail link has a `mailto:` colon before the actual
+    // credential separator. Recognise it before generic delimiter parsing.
+    const markdownPair = splitMarkdownMailto(line);
+    if (markdownPair) {
+      emailRaw = markdownPair.email;
+      passRaw = markdownPair.pass;
+      parsedDelim = markdownPair.delim;
+      how = 'markdown mail link (' + JSON.stringify(markdownPair.delim) + ')';
+    }
 
     // Pull a URL scheme off the front before anything else, otherwise the "://"
     // colon gets read as the email/password separator.
     const schemeMatch = line.match(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)(.*)$/);
     const body = schemeMatch ? schemeMatch[2] : line;
 
-    if (schemeMatch) {
+    if (schemeMatch && emailRaw == null) {
       // The line is a URL, so read it as URL userinfo: "email:password@host/path".
       // Anything after the '@' is the host, not part of the password.
       const ui = body.match(/^([^\s]+?):([^\s]*)@([^\s]*)$/);
@@ -270,13 +319,19 @@
       if (pair) {
         emailRaw = pair.email;
         passRaw = pair.pass;
+        parsedDelim = pair.delim;
         how = 'delimiter ' + JSON.stringify(pair.delim) + ' (' + pair.order + ')';
       }
     }
 
     if (emailRaw == null) {
       const ws = splitByWhitespace(body);
-      if (ws) { emailRaw = ws.email; passRaw = ws.pass; how = 'whitespace (' + ws.order + ')'; }
+      if (ws) {
+        emailRaw = ws.email;
+        passRaw = ws.pass;
+        parsedDelim = ws.delim;
+        how = 'whitespace (' + ws.order + ')';
+      }
     }
 
     // Last resort: the whole line is just an email (no password supplied).
@@ -293,7 +348,11 @@
 
     const emailKeep = normalizeEmail(emailRaw, opts);
     const email = emailKeep.toLowerCase();
-    const pass = tidy(passRaw);
+    // In the simple, human-friendly format, a row is `email:pass` or
+    // `email;pass`. A space starts trailing notes, so `email:pass anything`
+    // becomes only `email:pass`. Keep the older delimiter behaviour intact for
+    // callers that still use CSV/pipe input.
+    const pass = firstCredentialToken(passRaw, parsedDelim);
 
     const emailProblem = validateEmail(email, opts.strict);
     if (emailProblem) return Object.assign(base, { ok: false, reason: 'invalid email: ' + emailProblem, email, pass });

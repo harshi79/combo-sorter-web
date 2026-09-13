@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Combo Sorter — clean up messy email:pass lists</title>
-<meta name="description" content="Paste bulk email:pass text in any format and get one clean, de-duplicated list. Everything runs in your browser.">
+<title>Combo Sorter — simple email:pass cleaner</title>
+<meta name="description" content="Drop a text file or paste messy lines. Keep only email:pass and email;pass pairs, with trailing text removed locally in your browser.">
 <meta name="color-scheme" content="dark light">
 <link rel="stylesheet" href="styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧹</text></svg>">
@@ -21,7 +21,7 @@
     </div>
     <div class="brand-text">
       <h1>Combo Sorter</h1>
-      <p class="tagline">Any messy variant in → one clean <code>email:pass</code> list out</p>
+      <p class="tagline">Simple cleanup: <code>email:pass</code> or <code>email;pass</code> in, clean pairs out</p>
     </div>
   </div>
 
@@ -45,28 +45,25 @@
   <!-- 1 · INPUT -->
   <section class="panel panel-input" style="--area:input">
     <div class="panel-head">
-      <h2><span class="step">1</span> Paste the mess</h2>
+      <h2><span class="step">1</span> Paste or load a text file</h2>
       <div class="panel-actions">
         <label class="btn" title="Load one or more .txt / .csv files">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
           Load file<input type="file" id="fileInput" accept=".txt,.csv,.text,.log,text/plain,text/csv" multiple hidden>
         </label>
-        <button type="button" class="btn ghost" id="sampleBtn" title="Fill the box with messy sample data">Sample</button>
+        <button type="button" class="btn ghost" id="sampleBtn" title="Fill the box with messy sample data" hidden>Sample</button>
         <button type="button" class="btn ghost" id="clearBtn">Clear</button>
       </div>
     </div>
 
     <textarea id="input" class="mono" spellcheck="false" autocomplete="off" autocapitalize="off"
-      placeholder="Drop anything in here — every line is handled independently:
+      placeholder="Use one pair per line. Only email:pass and email;pass are kept.
 
-john@gmail.com:secret123
-john@gmail.com : secret123
-secret123:john@gmail.com
-john@gmail.com | secret123
-john@gmail.com,secret123
-&quot;john@gmail.com&quot;,&quot;secret123&quot;
-https://john@gmail.com:secret123@accounts.example.com/login
-# comments and blank lines are ignored"></textarea>
+[you@example.com](mailto:you@example.com):secret123 extra text is ignored
+you@example.com;secret123 more text is ignored
+cosmo@gmail.com: halo this trailing text is ignored
+
+Lines without a pair are ignored."></textarea>
 
     <div class="meta-bar"><span id="inputMeta">0 lines</span><span class="kbd-hint">Tip: drop files anywhere on the page</span></div>
     <div class="dropzone" id="dropzone">
@@ -76,7 +73,7 @@ https://john@gmail.com:secret123@accounts.example.com/login
   </section>
 
   <!-- 2 · RULES -->
-  <section class="panel panel-rules" style="--area:rules">
+  <section class="panel panel-rules" style="--area:rules" hidden aria-hidden="true">
     <h2><span class="step">2</span> Rules</h2>
     <div class="rules">
       <label class="switch">
@@ -194,7 +191,7 @@ https://john@gmail.com:secret123@accounts.example.com/login
   <!-- 3 · OUTPUT -->
   <section class="panel panel-output" style="--area:output">
     <div class="panel-head">
-      <h2><span class="step">3</span> Clean list</h2>
+      <h2><span class="step">2</span> Clean list</h2>
       <div class="panel-actions">
         <button type="button" class="btn primary" id="copyBtn">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
@@ -207,7 +204,7 @@ https://john@gmail.com:secret123@accounts.example.com/login
       </div>
     </div>
     <div class="stats" id="stats"></div>
-    <div class="split-bar">
+    <div class="split-bar" hidden aria-hidden="true">
       <span class="split-label">Split → .zip</span>
       <div class="select-wrap slim">
         <select id="splitMode" aria-label="Split mode">
@@ -229,13 +226,13 @@ https://john@gmail.com:secret123@accounts.example.com/login
   <!-- REJECTED -->
   <section class="panel panel-rejected" id="rejectedPanel" style="--area:rejected" hidden>
     <div class="panel-head">
-      <h2><span class="warn-dot" aria-hidden="true"></span>Rejected lines</h2>
+      <h2><span class="warn-dot" aria-hidden="true"></span>Ignored lines</h2>
       <div class="panel-actions">
         <button type="button" class="btn ghost" id="copyRejectedBtn">Copy</button>
         <button type="button" class="btn ghost" id="hideRejectedBtn">Hide</button>
       </div>
     </div>
-    <p class="hint">These lines were skipped. Fix them above, or loosen a rule if it's too strict for your data.</p>
+    <p class="hint">These lines had no email:pass or email;pass pair, so they were left out.</p>
     <div class="rejected-list" id="rejectedList"></div>
   </section>
 </main>

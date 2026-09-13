@@ -120,7 +120,7 @@
     const parts = [
       chip('lines', stats.lines),
       chip('clean', stats.valid, stats.valid ? 'good' : ''),
-      chip('rejected', stats.rejected, stats.rejected ? 'bad' : 'good'),
+      chip('ignored', stats.rejected, stats.rejected ? 'bad' : 'good'),
     ];
     if (stats.duplicatesRemoved) parts.push(chip('duplicates removed', stats.duplicatesRemoved, 'warn'));
     if (stats.filtered) parts.push(chip('filtered', stats.filtered, 'warn'));
