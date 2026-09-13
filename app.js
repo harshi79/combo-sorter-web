@@ -426,5 +426,8 @@
   // ---------------------------------------------------------------- boot
   initTheme();
   restore();
+  // The visible tool always produces the one simple format requested by the
+  // user, even if an older saved session used CSV/JSONL output.
+  els.format.value = 'email:pass';
   run();
 })();
