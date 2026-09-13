@@ -230,7 +230,10 @@
     let match;
     while ((match = re.exec(String(line || '')))) {
       const after = String(line || '').slice(match.index + match[0].length);
-      const pair = after.match(/^\s*([:;])\s*(\S+)/);
+      // Accept common copied-text wrappers around the address, for example
+      // `<user@example.com>:pass` or `"user@example.com":pass`.
+      const afterWrapper = after.replace(/^\s*[\]\)}> ,"']+(?=\s*[:;])/, '');
+      const pair = afterWrapper.match(/^\s*([:;])\s*(\S+)/);
       if (pair) {
         return {
           email: match[0],
